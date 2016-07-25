@@ -63,6 +63,8 @@
 	<constructor-arg ref="dataSource"/>
 	<constructor-arg ref="lookupStrategy"/>
 	<constructor-arg ref="aclCache"/>
+	  <property name="sidIdentityQuery" value="select currval(pg_get_serial_sequence('acl_sid', 'id'))"/>
+	  <property name="classIdentityQuery" value="select currval(pg_get_serial_sequence('acl_class', 'id'))"/>
   </bean>
 
 </beans>

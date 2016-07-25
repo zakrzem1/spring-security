@@ -54,6 +54,11 @@ public class ContactManagerBackend extends ApplicationObjectSupport implements
 
 	private ContactDao contactDao;
 	private MutableAclService mutableAclService;
+
+	public void setCounter(int counter) {
+		this.counter = counter;
+	}
+
 	private int counter = 1000;
 
 	// ~ Methods
