@@ -16,9 +16,8 @@
   <bean id="aclCache" class="org.springframework.security.acls.domain.EhCacheBasedAclCache">
 	<constructor-arg>
 	  <bean class="org.springframework.cache.ehcache.EhCacheFactoryBean">
-		<property name="cacheManager">
-		  <bean class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean"/>
-		</property>
+		<property name="cacheManager" ref="cacheManager"/>
+
 		<property name="cacheName" value="aclCache"/>
 	  </bean>
 	</constructor-arg>
@@ -67,4 +66,25 @@
 	  <property name="classIdentityQuery" value="select currval(pg_get_serial_sequence('acl_class', 'id'))"/>
   </bean>
 
+	<bean id="mbeanServer" class="org.springframework.jmx.support.MBeanServerFactoryBean">
+		<property name="locateExistingServerIfPossible" value="true"/>
+	</bean>
+
+	<bean name="cacheManager" class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean">
+		<property name="shared" value="true"/>
+	</bean>
+
+	<bean id="managementService"
+		  class="net.sf.ehcache.management.ManagementService"
+		  init-method="init"
+		  destroy-method="dispose">
+
+		<constructor-arg ref="cacheManager"/>
+		<constructor-arg ref="mbeanServer"/>
+		<constructor-arg index="2" value="true"/>
+		<constructor-arg index="3" value="true"/>
+		<constructor-arg index="4" value="true"/>
+		<constructor-arg index="5" value="true"/>
+
+	</bean>
 </beans>

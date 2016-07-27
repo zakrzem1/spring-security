@@ -15,13 +15,14 @@
  */
 package sample.contact;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.*;
 
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.acls.domain.AclImpl;
 import org.springframework.security.acls.domain.BasePermission;
@@ -63,9 +64,9 @@ public class DataSourcePopulator implements InitializingBean {
 	final String[] userNames = {
 
 	};
-	private int noOfContacts = 30000000;
+	private int noOfContacts = 10000;
 	private static final int NO_OF_USERS = 100;
-	private int batchSize = 10;
+	private int batchSize = 1000;
 
 	// ~ Methods
 	// ========================================================================================================
@@ -140,49 +141,59 @@ public class DataSourcePopulator implements InitializingBean {
 			template.execute("INSERT INTO AUTHORITIES VALUES('" + userId + "','ROLE_USER');");
 		}
 
-		createContact(1, "John Smith", "john@somewhere.com");
-		createContact(2, "Michael Citizen", "michael@xyz.com");
-		createContact(3, "Joe Bloggs", "joe@demo.com");
-		createContact(4, "Karen Sutherland", "karen@sutherland.com");
-		createContact(5, "Mitchell Howard", "mitchell@abcdef.com");
-		createContact(6, "Rose Costas", "rose@xyz.com");
-		createContact(7, "Amanda Smith", "amanda@abcdef.com");
-		createContact(8, "Cindy Smith", "cindy@smith.com");
-		createContact(9, "Jonathan Citizen", "jonathan@xyz.com");
-
+		createContacts(Arrays.asList(new Contact(1L, "John Smith", "john@somewhere.com"),
+			new Contact(2L, "Michael Citizen", "michael@xyz.com"), new Contact(3L, "Joe Bloggs", "joe@demo.com"),
+			new Contact(4L, "Karen Sutherland", "karen@sutherland.com"),
+			new Contact(5L, "Mitchell Howard", "mitchell@abcdef.com"), new Contact(6L, "Rose Costas", "rose@xyz.com"),
+			new Contact(7L, "Amanda Smith", "amanda@abcdef.com"), new Contact(8L, "Cindy Smith", "cindy@smith.com"),
+			new Contact(9L, "Jonathan Citizen", "jonathan@xyz.com")));
 		System.out.println("Inserting contacts");
+		LinkedList<Contact> contacts = new LinkedList<Contact>();
+		long startTime = System.currentTimeMillis();
+		long contactsCreated = 0;
 		for (int i = 10; i < noOfContacts; i++) {
 			String[] person = selectPerson();
-			createContact(i, person[2], person[0].toLowerCase() + "@" + person[1].toLowerCase() + ".com");
+			contacts.add(
+				new Contact((long) i, person[2], person[0].toLowerCase() + "@" + person[1].toLowerCase() + ".com"));
 			if (i % batchSize == 0) {
-				System.out.println("noOfContacts " + i);
+				createContacts(contacts);
+				long batchTime = (System.currentTimeMillis() - startTime);
+				contactsCreated += contacts.size();
+				double creationRatio = contactsCreated * 1000 / batchTime;
+				System.out.println("noOfContacts " + i + ", (" + creationRatio + " objs/s)");
+				contacts = new LinkedList<Contact>();
 			}
-			createObjectIdentity(i);
 		}
+		createContacts(contacts);
 
 		// Now grant some permissions
 		grantPermissions(1, "rod", BasePermission.ADMINISTRATION);
+
 		grantPermissions(2, "rod", BasePermission.READ);
+
 		grantPermissions(3, "rod", BasePermission.READ);
-		grantPermissions(3, "rod", BasePermission.WRITE);
-		grantPermissions(3, "rod", BasePermission.DELETE);
-		grantPermissions(4, "rod", BasePermission.ADMINISTRATION);
-		grantPermissions(4, "dianne", BasePermission.ADMINISTRATION);
-		grantPermissions(4, "scott", BasePermission.READ);
-		grantPermissions(5, "dianne", BasePermission.ADMINISTRATION);
-		grantPermissions(5, "dianne", BasePermission.READ);
-		grantPermissions(6, "dianne", BasePermission.READ);
-		grantPermissions(6, "dianne", BasePermission.WRITE);
-		grantPermissions(6, "dianne", BasePermission.DELETE);
-		grantPermissions(6, "scott", BasePermission.READ);
+		grantPermissions(3, Arrays.asList(new PermissionForUser("rod", BasePermission.WRITE),
+			new PermissionForUser("rod", BasePermission.DELETE)));
+
+		grantPermissions(4, Arrays.asList(new PermissionForUser("rod", BasePermission.ADMINISTRATION),
+			new PermissionForUser("dianne", BasePermission.ADMINISTRATION),
+			new PermissionForUser("scott", BasePermission.READ)));
+
+		grantPermissions(5, Arrays.asList(new PermissionForUser("dianne", BasePermission.ADMINISTRATION),
+			new PermissionForUser("dianne", BasePermission.READ)));
+
+		grantPermissions(6, Arrays.asList(new PermissionForUser("dianne", BasePermission.READ),
+			new PermissionForUser("dianne", BasePermission.WRITE),
+			new PermissionForUser("dianne", BasePermission.DELETE),
+			new PermissionForUser("scott", BasePermission.READ)));
+
 		grantPermissions(7, "scott", BasePermission.ADMINISTRATION);
-		grantPermissions(8, "dianne", BasePermission.ADMINISTRATION);
-		grantPermissions(8, "dianne", BasePermission.READ);
-		grantPermissions(8, "scott", BasePermission.READ);
-		grantPermissions(9, "scott", BasePermission.ADMINISTRATION);
-		grantPermissions(9, "scott", BasePermission.READ);
-		grantPermissions(9, "scott", BasePermission.WRITE);
-		grantPermissions(9, "scott", BasePermission.DELETE);
+
+		grantPermissions(8, Arrays.asList(new PermissionForUser("dianne", BasePermission.ADMINISTRATION),
+			new PermissionForUser("dianne", BasePermission.READ), new PermissionForUser("scott", BasePermission.READ),
+			new PermissionForUser("scott", BasePermission.ADMINISTRATION),
+			new PermissionForUser("scott", BasePermission.READ), new PermissionForUser("scott", BasePermission.WRITE),
+			new PermissionForUser("scott", BasePermission.DELETE)));
 
 		// Now expressly change the owner of the first ten contacts
 		// We have to do this last, because "rod" owns all of them (doing it sooner would
@@ -200,20 +211,51 @@ public class DataSourcePopulator implements InitializingBean {
 				BasePermission.DELETE };
 
 		// consistent sample data
-		for (int userIdx = 1; userIdx < NO_OF_USERS; userIdx++) {
-			for (int i = 10; i < noOfContacts; i++) {
+		long permissionsStartTime = System.currentTimeMillis();
+		long aclsProcessed = 0;
+
+		Collection<PermissionForUser> permissionsForUsers;
+		for (int i = 10; i < noOfContacts; i++) {
+			permissionsForUsers = new LinkedList<PermissionForUser>();
+			//System.out.println("Setting permissions for contact " + i);
+			for (int userIdx = 1; userIdx < NO_OF_USERS; userIdx++) {
 				String user = users.get(userIdx);
 				Permission permission = permissions[rnd.nextInt(permissions.length)];
-				grantPermissions(i, user, permission);
+				permissionsForUsers.add(new PermissionForUser(user, permission));
+			}
+			grantPermissions(i, permissionsForUsers);
+			aclsProcessed++;
+			if (i % batchSize == 0) {
+				double permRatio = aclsProcessed * 1000 / (System.currentTimeMillis() - permissionsStartTime);
+				System.out.println("acls: " + i + ", ratio = " + permRatio + " acls/s");
 			}
 		}
+		System.out.println(
+			"zusammen ratio = " + (aclsProcessed * 1000 / (System.currentTimeMillis() - permissionsStartTime))
+				+ " permissions/s");
 
 		SecurityContextHolder.clearContext();
 	}
 
-	private void createContact(int i, String fullName, String email) {
-		template.execute("INSERT INTO contacts VALUES (1, '" + fullName + "', '" + email + "');");
-		createObjectIdentity(1);
+	private void createContacts(final List<Contact> contacts) {
+		//int i, String fullName, String email
+		template.batchUpdate("INSERT INTO contacts VALUES (?, ?, ?) ", new BatchPreparedStatementSetter() {
+			@Override
+			public void setValues(PreparedStatement ps, int i) throws SQLException {
+				ps.setLong(1, contacts.get(i).getId());
+				ps.setString(2, contacts.get(i).getName());
+				ps.setString(3, contacts.get(i).getEmail());
+			}
+
+			@Override
+			public int getBatchSize() {
+				return contacts.size();
+			}
+		});
+
+		for (Contact contact : contacts) {
+			createObjectIdentity(contact.getId().intValue());
+		}
 	}
 
 	private void createObjectIdentity(int i) {
@@ -298,10 +340,17 @@ public class DataSourcePopulator implements InitializingBean {
 		return noOfContacts;
 	}
 
-	private void grantPermissions(int contactNumber, String recipientUsername, Permission permission) {
+	private void grantPermissions(int i, String rod, Permission administration) {
+		grantPermissions(i, Arrays.asList(new PermissionForUser(rod, administration)));
+	}
+
+	private void grantPermissions(int contactNumber, Collection<PermissionForUser> permissionsForUsers) {
 		AclImpl acl =
-			(AclImpl) mutableAclService.readAclById(new ObjectIdentityImpl(Contact.class, new Long(contactNumber)));
-		acl.insertAce(acl.getEntries().size(), permission, new PrincipalSid(recipientUsername), true);
+			(AclImpl) mutableAclService.readAclById(new ObjectIdentityImpl(Contact.class, (long) contactNumber));
+		for (PermissionForUser userPermission : permissionsForUsers) {
+			acl.insertAce(acl.getEntries().size(), userPermission.getPermission(),
+				new PrincipalSid(userPermission.getRecipientUsername()), true);
+		}
 		updateAclInTransaction(acl);
 	}
 
@@ -337,5 +386,23 @@ public class DataSourcePopulator implements InitializingBean {
 				return null;
 			}
 		});
+	}
+
+	private class PermissionForUser {
+		String recipientUsername;
+		Permission permission;
+
+		public PermissionForUser(String recipientUsername, Permission permission) {
+			this.recipientUsername = recipientUsername;
+			this.permission = permission;
+		}
+
+		public String getRecipientUsername() {
+			return recipientUsername;
+		}
+
+		public Permission getPermission() {
+			return permission;
+		}
 	}
 }

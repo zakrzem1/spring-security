@@ -103,6 +103,8 @@ public class ContactManagerBackend extends ApplicationObjectSupport implements
 	}
 
 	public void delete(Contact contact) {
+		long start = System.nanoTime();
+
 		contactDao.delete(contact.getId());
 
 		// Delete the ACL information as well
@@ -112,6 +114,8 @@ public class ContactManagerBackend extends ApplicationObjectSupport implements
 		if (logger.isDebugEnabled()) {
 			logger.debug("Deleted contact " + contact + " including ACL permissions");
 		}
+		long end = System.nanoTime();
+		System.out.println("[ContactManagerBackend][selete] "+(end-start)+"ns, start="+start+", end="+end);
 	}
 
 	public void deletePermission(Contact contact, Sid recipient, Permission permission) {
